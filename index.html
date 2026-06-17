@@ -146,7 +146,7 @@
 
         <div class="row g-3 mb-4">
             <div class="col-6">
-                <label starve for="monthSelect" class="form-label">Звітний місяць</label>
+                <label for="monthSelect" class="form-label">Звітний місяць</label>
                 <select class="form-select" id="monthSelect" required>
                     <option value="" selected disabled>-- Місяць --</option>
                     <option value="01">Січень (01)</option>
@@ -202,6 +202,27 @@
     const btnSpinner     = document.getElementById('btnSpinner');
 
     let currentStructure = [];
+
+    // Функція аналізу пристрою та браузера з User-Agent
+    function getDeviceAndBrowser() {
+        const ua = navigator.userAgent;
+        let device = "Невідомий пристрій";
+        let browser = "Невідомий браузер";
+
+        if (/windows/i.test(ua)) device = "PC (Windows)";
+        else if (/macintosh|mac os x/i.test(ua) && !/mobile/i.test(ua)) device = "PC (Mac)";
+        else if (/iphone|ipad|ipod/i.test(ua)) device = "iPhone / iPad (iOS)";
+        else if (/android/i.test(ua)) device = "Смартфон (Android)";
+        else if (/linux/i.test(ua)) device = "PC (Linux)";
+
+        if (/opera|opr/i.test(ua)) browser = "Opera";
+        else if (/edg/i.test(ua)) browser = "Edge";
+        else if (/chrome|chromium|crios/i.test(ua)) browser = "Chrome";
+        else if (/safari/i.test(ua)) browser = "Safari";
+        else if (/firefox|fxios/i.test(ua)) browser = "Firefox";
+
+        return { device, browser };
+    }
 
     fetch(N8N_URL_GET_STRUCTURE)
         .then(res => { if (!res.ok) throw new Error(); return res.text(); })
@@ -320,13 +341,16 @@
         btnText.innerText = 'Перевірка періоду та пароля...';
         btnSpinner.classList.remove('d-none');
 
+        // Визначаємо характеристики пристрою оператора
+        const info = getDeviceAndBrowser();
+
         fetch(N8N_URL_CHECK_GATEWAY, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ category: category, sub_unit: subUnit, month: month, year: year })
         })
         .then(res => { if (!res.ok) throw new Error(); return res.json(); })
-        .then(async (data) => { // Додано async для використання await всередині
+        .then(async (data) => {
             let responseData = Array.isArray(data) ? data[0] : data;
             if (responseData.json) responseData = responseData.json;
 
@@ -334,28 +358,43 @@
                 const correctPassword = String(responseData.Pasword || responseData.Password || responseData.password || '').trim();
 
                 if (pass === correctPassword) {
-                    // 🟢 УСПІШНИЙ ВХІД — ЧЕКАЄМО ЗАВЕРШЕННЯ ЗАПИТУ ЛОГУВАННЯ
                     btnText.innerText = 'Авторизація успішна...';
                     try {
+                        // Передаємо лог успішного входу разом із даними браузера та пристрою
                         await fetch('https://sokoliksokolik.app.n8n.cloud/webhook/log-system-enter', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ category: category, sub_unit: subUnit, month: month, year: year, status: "Успішно" })
+                            body: JSON.stringify({ 
+                                category: category, 
+                                sub_unit: subUnit, 
+                                month: month, 
+                                year: year, 
+                                status: "Успішно",
+                                device: info.device,
+                                browser: info.browser
+                            })
                         });
                     } catch (logErr) {
                         console.error("Помилка відправки логу успішного входу:", logErr);
                     }
 
-                    // ТІЛЬКИ ТЕПЕР ПЕРЕНАПРАВЛЯЄМО Оператора
                     const tableId = responseData.table_id || '';
                     window.location.href = `index_PMM_V3.html?category=${encodeURIComponent(category)}&sub_unit=${encodeURIComponent(subUnit)}&month=${month}&year=${year}&table_id=${encodeURIComponent(tableId)}`;
                 } else {
-                    // 🔴 НЕВІРНИЙ ПАРОЛЬ — ТУТ ТЕЖ ДЛЯ СТАБІЛЬНОСТІ ЧЕКАЄМО
                     try {
+                        // Передаємо лог помилки разом із даними браузера та пристрою
                         await fetch('https://sokoliksokolik.app.n8n.cloud/webhook/log-system-enter', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ category: category, sub_unit: subUnit, month: month, year: year, status: "Невірний пароль" })
+                            body: JSON.stringify({ 
+                                category: category, 
+                                sub_unit: subUnit, 
+                                month: month, 
+                                year: year, 
+                                status: "Невірний пароль",
+                                device: info.device,
+                                browser: info.browser
+                            })
                         });
                     } catch (logErr) {
                         console.error("Помилка відправки логу помилки:", logErr);
