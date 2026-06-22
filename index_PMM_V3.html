@@ -341,7 +341,8 @@
                     sub_unit: USER_SUB_UNIT,
                     month: REPORT_MONTH,
                     year: REPORT_YEAR,
-                    table_id: TABLE_ID
+                    table_id: TABLE_ID,
+                    period: document.getElementById('report_period') ? document.getElementById('report_period').value || 'I' : 'I'
                 })
             });
 
@@ -412,12 +413,13 @@
             const response = await fetch(searchUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+               body: JSON.stringify({
                     category: USER_CATEGORY,
                     sub_unit: USER_SUB_UNIT,
                     month: REPORT_MONTH,
                     year: REPORT_YEAR,
-                    table_id: TABLE_ID
+                    table_id: TABLE_ID,
+                    period: document.getElementById('report_period').value || 'I'
                 })
             });
             const allVehicles = await response.json();
