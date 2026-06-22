@@ -419,7 +419,7 @@
                     month: REPORT_MONTH,
                     year: REPORT_YEAR,
                     table_id: TABLE_ID,
-                    period: document.getElementById('report_period').value || 'I'
+                    period: document.getElementById('report_period') ? document.getElementById('report_period').value || 'I' : 'I'
                 })
             });
             const allVehicles = await response.json();
