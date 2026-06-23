@@ -340,23 +340,16 @@
                     category: USER_CATEGORY,
                     sub_unit: USER_SUB_UNIT,
                     month: REPORT_MONTH,
-                    year: REPORT_YEAR
+                    year: REPORT_YEAR,
+                    table_id: TABLE_ID,
+                    period: document.getElementById('report_period') ? document.getElementById('report_period').value || 'I' : 'I'
                 })
             });
 
             if (response.ok && response.headers.get('content-type')?.includes('application/json')) {
                 const jsonResponse = await response.json();
-                availableVehicles = jsonResponse
-                    .filter(item => item && !item.error && item.viyskovyi_nomer)
-                    .map(item => ({
-                        id_OBT_IT: item.id_OBT_IT,
-                        viyskovyi_nomer: item.viyskovyi_nomer,
-                        marka_tekhniky: item.marka_tekhniky,
-                        ovt_it: item.ovt_it,
-                        pidrozdil: item.pidrozdil,
-                        But: item.But
-                    }));
-                autocomplete(document.getElementById("vehicle_number"), availableVehicles.map(v => v.viyskovyi_nomer));
+                availableVehicles = jsonResponse.map(item => item.viyskovyi_nomer || item.json?.viyskovyi_nomer).filter(Boolean);
+                autocomplete(document.getElementById("vehicle_number"), availableVehicles);
             }
         } catch (error) { 
             console.error("Помилка завантаження списку відфільтрованої техніки V3:", error); 
@@ -409,7 +402,7 @@
         document.addEventListener("click", function (e) { closeAllLists(e.target); });
     }
 
-    async function fetchVehicleData(vNumber) {
+    async function fetchVehicleData(vNumber, mode = 'current') {
         if (!vNumber || vNumber.trim().length < 3) {
             resetInfoPanel();
             return;
@@ -426,13 +419,12 @@
                 body: JSON.stringify({
                     viyskovyi_nomer: cleanNumber,
                     month: REPORT_MONTH,
-                    year: REPORT_YEAR
+                    year: REPORT_YEAR,
+                    mode
                 })
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
             const vehicle = await response.json();
 
@@ -457,6 +449,7 @@
             document.getElementById('info-pidrozdil').textContent = vehicle.pidrozdil || '-';
             document.getElementById('info-marka').textContent = `${vehicle.marka_tekhniky || '-'} / ${vehicle.viyskovyi_nomer || '-'}`;
             document.getElementById('info-dl').textContent = vehicle.ostanniy_nomer_dl ?? '-';
+            document.getElementById('info-pokaznyky').textContent = '-';
             document.getElementById('info-palne-typ').textContent = vehicle.palne_typ || '-';
             document.getElementById('info-palne-norma').textContent = vehicle.l_100_km ? `${vehicle.l_100_km} / 100 км` : '-';
 
@@ -525,22 +518,20 @@
             }
 
             document.getElementById('info-board').style.display = 'block';
-
             handleVehicleTypeFields(vehicle.ovt_it);
 
             const lastOdoVal = parseFloat(vehicle.ostanni_pokaznyky_odometra || 0);
             const odoInput = document.getElementById('odometer_end');
-            if (odoInput && lastOdoVal > 0) {
-                odoInput.value = lastOdoVal;
+            if (odoInput) {
+                odoInput.value = lastOdoVal > 0 ? lastOdoVal : '';
                 calculateDistance();
             }
 
-            try { await checkDuplicatePeriod(); } catch (e) { console.error(e); }
             try { calculateAllNormsAndBalances(); } catch (e) { console.error(e); }
 
         } catch (error) {
             if (requestId === currentRequestId) {
-                console.error('Помилка завантаження картки техніки V3:', error);
+                console.error('Помилка завантаження картки техніки:', error);
                 resetInfoPanel();
             }
         }
@@ -708,17 +699,33 @@
     }
 
     async function checkDuplicatePeriod() {
-        const p = document.getElementById('report_period').value, n = document.getElementById('vehicle_number').value.trim();
-        window._submitAction = 'create';
+        const p = document.getElementById('report_period').value;
+        const n = document.getElementById('vehicle_number').value.trim();
+        window.submitAction = 'create';
+
         if (p && n) {
             const tableIdParam = TABLE_ID ? `&table_id=${encodeURIComponent(TABLE_ID)}` : '';
             const monthParam = REPORT_MONTH ? `&month=${encodeURIComponent(REPORT_MONTH)}` : '';
             const yearParam = REPORT_YEAR ? `&year=${encodeURIComponent(REPORT_YEAR)}` : '';
-            
+
             const r = await fetch(`${N8N_CLOUD_HOST}/webhook/check-period-duplicate?number=${encodeURIComponent(n)}&period=${encodeURIComponent(p)}${tableIdParam}${monthParam}${yearParam}`);
-            if (r.ok && (await r.json()).exists) {
-                if (confirm(`Дані для ${n} за період ${p} вже є. Оновити?`)) window._submitAction = 'update';
-                else document.getElementById('report_period').value = '';
+
+            if (r.ok) {
+                const result = await r.json();
+
+                if (result.exists) {
+                    const confirmUpdate = confirm(`Для ${n} вже існує запис за період ${p}. Натисніть OK для перезапису даними з минулого періоду.`);
+
+                    if (confirmUpdate) {
+                        window.submitAction = 'update';
+                        await fetchVehicleData(n, 'previous_period');
+                    } else {
+                        document.getElementById('report_period').value = '';
+                        resetInfoPanel();
+                    }
+                } else {
+                    window.submitAction = 'create';
+                }
             }
         }
     }
@@ -770,7 +777,7 @@
             fuel: { total_amount: parseFloat(document.getElementById('total_fuel').value), consumed: parseFloat(document.getElementById('consumed_fuel').value), entries: Array.from(document.querySelectorAll('.fuel-row')).map(r => ({ quantity: parseFloat(r.querySelector('[name="fuel_qty"]').value), type: r.querySelector('[name="fuel_type"]').value, date: r.querySelector('[name="fuel_date"]').value })) },
             oil: { total_amount: parseFloat(document.getElementById('total_oil').value), calculated_norm: parseFloat(document.getElementById('calculated_oil_norm').value), consumed: parseFloat(document.getElementById('consumed_oil').value), entries: Array.from(document.querySelectorAll('.oil-row')).map(r => ({ quantity: parseFloat(r.querySelector('[name="oil_qty"]').value), type: r.querySelector('[name="oil_type"]').value, date: r.querySelector('[name="oil_date"]').value })) },
             liquids: { total_amount: parseFloat(document.getElementById('total_liquid').value), calculated_norm: parseFloat(document.getElementById('calculated_liquid_norm').value), consumed: parseFloat(document.getElementById('consumed_liquid').value), entries: Array.from(document.querySelectorAll('.liquid-row')).map(r => ({ quantity: parseFloat(r.querySelector('[name="liquid_qty"]').value), type: r.querySelector('[name="liquid_type"]').value, date: r.querySelector('[name="liquid_date"]').value })) },
-            but: window._currentBut ?? '', id_vnutr: window._currentIdVnutr ?? '', id_obt_it: window._currentIdOBTIT ?? '', submitted_at: new Date().toISOString()
+            but: window._currentBut ?? '', id_vnutr: window._currentIdVnutr ?? '', submitted_at: new Date().toISOString()
         };
 
         fetch(`${N8N_CLOUD_HOST}/webhook/submit-report`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
