@@ -473,7 +473,13 @@
         if (liq2el) liq2el.textContent = formatValue(vehicle.ridyna_zalyshok_2, 'л. / ' + (vehicle.ridyna_zalyshok_kg_2 || 0) + ' кг.', vehicle.ridyna_typ_2);
 
         document.getElementById('info-board').style.display = 'block';
-        handleVehicleTypeFields(vehicle.ovt_it);
+
+const p = document.getElementById('report_period').value;
+if (p) {
+    try { await checkDuplicatePeriod(); } catch(e) { console.error(e); }
+}
+
+handleVehicleTypeFields(vehicle.ovt_it);
 
         const lastOdoVal = parseFloat(vehicle.ostanni_pokaznyky_odometra) || 0;
         const odoInput = document.getElementById('odometer_end');
