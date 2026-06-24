@@ -419,8 +419,9 @@
                     viyskovyi_nomer: cleanNumber,
                     month: REPORT_MONTH,
                     year: REPORT_YEAR,
-                    mode: mode
-                })
+                   mode: mode,
+    period: document.getElementById('report_period').value || 'I'  // ← додати
+})
             });
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             vehicle = await response.json();
@@ -653,17 +654,26 @@ handleVehicleTypeFields(vehicle.ovt_it);
             
             const r = await fetch(`${N8N_CLOUD_HOST}/webhook/check-period-duplicate?number=${encodeURIComponent(n)}&period=${encodeURIComponent(p)}${tableIdParam}${monthParam}${yearParam}`);
             if (r.ok && (await r.json()).exists) {
-                if (confirm(`Дані для ${n} за період ${p} вже є. Оновити?`)) window._submitAction = 'update';
-                else document.getElementById('report_period').value = '';
-            }
+    if (confirm(`Дані для ${n} за період ${p} вже є. Оновити?`)) {
+        window._submitAction = 'update';
+        window._isDuplicatePeriod = true;  // ← додати прапорець
+    } else {
+        document.getElementById('report_period').value = '';
+        window._isDuplicatePeriod = false;
+    }
+}
         }
     }
 
     async function onPeriodChange() {
-        try { await checkDuplicatePeriod(); } catch (e) { console.error(e); }
-        const n = document.getElementById('vehicle_number').value.trim();
-        if (n.length >= 3) { await fetchVehicleData(n); }
+    window._isDuplicatePeriod = false;  // скидаємо перед перевіркою
+    try { await checkDuplicatePeriod(); } catch (e) { console.error(e); }
+    const n = document.getElementById('vehicle_number').value.trim();
+    if (n.length >= 3) {
+        const mode = window._isDuplicatePeriod ? 'duplicate' : 'current';
+        await fetchVehicleData(n, mode);  // ← передаємо mode
     }
+}
 
     document.getElementById('vehicleForm').addEventListener('submit', function(e) {
         e.preventDefault();
