@@ -403,15 +403,14 @@
     }
 
     async function fetchVehicleData(vNumber, mode = 'current') {
-        if (!vNumber || vNumber.trim().length < 3) {
-            resetInfoPanel();
-            return;
-        }
+        if (!vNumber || vNumber.trim().length < 3) { resetInfoPanel(); return; }
 
         const requestId = ++currentRequestId;
         const cleanNumber = vNumber.trim().toUpperCase();
+
         const infoUrl = `${N8N_CLOUD_HOST}/webhook/get-vehicle-data`;
 
+        let vehicle;
         try {
             const response = await fetch(infoUrl, {
                 method: 'POST',
@@ -420,124 +419,70 @@
                     viyskovyi_nomer: cleanNumber,
                     month: REPORT_MONTH,
                     year: REPORT_YEAR,
-                    mode
+                    mode: mode
                 })
             });
-
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const vehicle = await response.json();
-
-            if (requestId !== currentRequestId) return;
-
-            const currentInputVal = document.getElementById("vehicle_number").value.trim().toUpperCase();
-            if (cleanNumber !== currentInputVal) return;
-
-            if (!vehicle || vehicle.error) {
-                resetInfoPanel();
-                return;
-            }
-
-            window._vehicleCache = vehicle;
-            window._currentOvtIt = vehicle.ovt_it || '';
-            window._currentFuelType = (vehicle.palne_typ || '').trim().toLowerCase();
-            window._currentOilType = vehicle.olyva_typ_1 || vehicle.olyva_typ || '';
-            window._currentBut = vehicle.But ?? '';
-            window._currentIdVnutr = vehicle.id_Vnutr ?? '';
-            window._currentIdOBTIT = vehicle.id_OBT_IT ?? '';
-
-            document.getElementById('info-pidrozdil').textContent = vehicle.pidrozdil || '-';
-            document.getElementById('info-marka').textContent = `${vehicle.marka_tekhniky || '-'} / ${vehicle.viyskovyi_nomer || '-'}`;
-            document.getElementById('info-dl').textContent = vehicle.ostanniy_nomer_dl ?? '-';
-            document.getElementById('info-pokaznyky').textContent = '-';
-            document.getElementById('info-palne-typ').textContent = vehicle.palne_typ || '-';
-            document.getElementById('info-palne-norma').textContent = vehicle.l_100_km ? `${vehicle.l_100_km} / 100 км` : '-';
-
-            const oilNormEl = document.getElementById('info-olyva-norma');
-            if (oilNormEl) {
-                oilNormEl.textContent = vehicle.olyva_norma ? `${vehicle.olyva_norma} / 100 л пального` : '0';
-            }
-
-            const liquidNormEl = document.getElementById('info-ridyna-norma');
-            if (liquidNormEl) {
-                liquidNormEl.textContent = vehicle.ridyna_norma ? `${vehicle.ridyna_norma} / 100 л пального` : '0';
-            }
-
-            let pokaznykyText = '-';
-            const odo = vehicle.ostanni_pokaznyky_odometra ?? 0;
-            const moto = vehicle.pokaznyk_lichylnyka_motohodyn ?? 0;
-            const ovt = (vehicle.ovt_it || '').trim().toUpperCase();
-
-            if (ovt === 'ОВТ') pokaznykyText = odo;
-            else if (ovt === 'ІТ') pokaznykyText = moto;
-            else if (ovt === 'ОВТ/ІТ') pokaznykyText = `${odo} / ${moto}`;
-            else pokaznykyText = odo;
-
-            document.getElementById('info-pokaznyky').textContent = pokaznykyText;
-
-            document.getElementById('info-palne-zal1').textContent = formatValue(
-                vehicle.zalyshok_v_batsi_1,
-                `л. / ${vehicle.zalyshok_v_batsi_kg_1 || 0} кг.`,
-                vehicle.naymenuvannya_v_batsi_1
-            );
-
-            document.getElementById('info-palne-zal2').textContent = formatValue(
-                vehicle.zalyshok_v_batsi_2,
-                `л. / ${vehicle.zalyshok_v_batsi_kg_2 || 0} кг.`,
-                vehicle.naymenuvannya_v_batsi_2
-            );
-
-            document.getElementById('info-olyva-zal1').textContent = formatValue(
-                vehicle.olyva_zalyshok_1,
-                `л. / ${vehicle.olyva_zalyshok_kg_1 || 0} кг.`,
-                vehicle.olyva_typ_1
-            );
-
-            const oil2 = document.getElementById('info-olyva-zal2');
-            if (oil2) {
-                oil2.textContent = formatValue(
-                    vehicle.olyva_zalyshok_2,
-                    `л. / ${vehicle.olyva_zalyshok_kg_2 || 0} кг.`,
-                    vehicle.olyva_typ_2
-                );
-            }
-
-            document.getElementById('info-ridyna-zal1').textContent = formatValue(
-                vehicle.ridyna_zalyshok_1,
-                `л. / ${vehicle.ridyna_zalyshok_kg_1 || 0} кг.`,
-                vehicle.ridyna_typ_1
-            );
-
-            const liq2 = document.getElementById('info-ridyna-zal2');
-            if (liq2) {
-                liq2.textContent = formatValue(
-                    vehicle.ridyna_zalyshok_2,
-                    `л. / ${vehicle.ridyna_zalyshok_kg_2 || 0} кг.`,
-                    vehicle.ridyna_typ_2
-                );
-            }
-
-            document.getElementById('info-board').style.display = 'block';
-            handleVehicleTypeFields(vehicle.ovt_it);
-
-            const lastOdoVal = parseFloat(vehicle.ostanni_pokaznyky_odometra || 0);
-            const odoInput = document.getElementById('odometer_end');
-            if (odoInput) {
-                odoInput.value = lastOdoVal > 0 ? lastOdoVal : '';
-                calculateDistance();
-            }
-
-            try { calculateAllNormsAndBalances(); } catch (e) { console.error(e); }
-
+            vehicle = await response.json();
         } catch (error) {
             if (requestId === currentRequestId) {
                 console.error('Помилка завантаження картки техніки:', error);
                 resetInfoPanel();
             }
+            return;
         }
+
+        if (requestId !== currentRequestId) return;
+        const currentInputVal = document.getElementById("vehicle_number").value.trim();
+        if (cleanNumber !== currentInputVal.toUpperCase()) return;
+
+        if (!vehicle || vehicle.error) { resetInfoPanel(); return; }
+
+        window._vehicleCache = vehicle;
+        window._currentOvtIt = vehicle.ovt_it || 'ОВТ';
+        window._currentFuelType = (vehicle.palne_typ || '').trim().toLowerCase();
+        window._currentOilType = vehicle.olyva_typ_1 || vehicle.olyva_typ || '';
+        window._currentBut = vehicle.But ?? '';
+        window._currentIdVnutr = vehicle.id_Vnutr ?? '';
+
+        document.getElementById('info-pidrozdil').textContent = vehicle.pidrozdil || '-';
+        document.getElementById('info-marka').textContent = `${vehicle.marka_tekhniky || '-'} (${vehicle.viyskovyi_nomer || '-'})`;
+        document.getElementById('info-dl').textContent = vehicle.ostanniy_nomer_dl || '-';
+        document.getElementById('info-palne-typ').textContent = vehicle.palne_typ || '-';
+        document.getElementById('info-palne-norma').textContent = vehicle.l_100_km ? `${vehicle.l_100_km} л/100 км` : 'н.д.';
+        document.getElementById('info-olyva-norma').textContent = vehicle.olyva_norma ? `${vehicle.olyva_norma} л/100 л` : '0';
+        document.getElementById('info-ridyna-norma').textContent = vehicle.ridyna_norma ? `${vehicle.ridyna_norma} л/100 л` : '0';
+
+        let pokaznykyText = '';
+        const odo = vehicle.ostanni_pokaznyky_odometra ?? 0;
+        const moto = vehicle.pokaznyk_lichylnyka_motohodyn ?? 0;
+        const ovt = (vehicle.ovt_it || '').trim().toUpperCase();
+        if (ovt === 'ОВТ') pokaznykyText = `${odo} км (Одометр)`;
+        else if (ovt === 'ІТ') pokaznykyText = `${moto} м/год (Лічильник)`;
+        else if (ovt === 'ОВТ/ІТ') pokaznykyText = `Одом: ${odo} км | Мото: ${moto} м/год`;
+        else pokaznykyText = `${odo} км`;
+        document.getElementById('info-pokaznyky').textContent = pokaznykyText;
+
+        document.getElementById('info-palne-zal1').textContent = formatValue(vehicle.zalyshok_v_batsi_1, 'л. / ' + (vehicle.zalyshok_v_batsi_kg_1 || 0) + ' кг.', vehicle.naymenuvannya_v_batsi_1);
+        document.getElementById('info-palne-zal2').textContent = formatValue(vehicle.zalyshok_v_batsi_2, 'л. / ' + (vehicle.zalyshok_v_batsi_kg_2 || 0) + ' кг.', vehicle.naymenuvannya_v_batsi_2);
+        document.getElementById('info-olyva-zal1').textContent = formatValue(vehicle.olyva_zalyshok_1, 'л. / ' + (vehicle.olyva_zalyshok_kg_1 || 0) + ' кг.', vehicle.olyva_typ_1);
+        const oil2el = document.getElementById('info-olyva-zal2');
+        if (oil2el) oil2el.textContent = formatValue(vehicle.olyva_zalyshok_2, 'л. / ' + (vehicle.olyva_zalyshok_kg_2 || 0) + ' кг.', vehicle.olyva_typ_2);
+        document.getElementById('info-ridyna-zal1').textContent = formatValue(vehicle.ridyna_zalyshok_1, 'л. / ' + (vehicle.ridyna_zalyshok_kg_1 || 0) + ' кг.', vehicle.ridyna_typ_1);
+        const liq2el = document.getElementById('info-ridyna-zal2');
+        if (liq2el) liq2el.textContent = formatValue(vehicle.ridyna_zalyshok_2, 'л. / ' + (vehicle.ridyna_zalyshok_kg_2 || 0) + ' кг.', vehicle.ridyna_typ_2);
+
+        document.getElementById('info-board').style.display = 'block';
+        handleVehicleTypeFields(vehicle.ovt_it);
+
+        const lastOdoVal = parseFloat(vehicle.ostanni_pokaznyky_odometra) || 0;
+        const odoInput = document.getElementById('odometer_end');
+        if (odoInput) { odoInput.value = lastOdoVal > 0 ? lastOdoVal : ''; calculateDistance(); }
+
+        try { calculateAllNormsAndBalances(); } catch(e) { console.error(e); }
     }
 
-    function handleVehicleTypeFields(ovt_it) {
+        function handleVehicleTypeFields(ovt_it) {
         const odomGroup = document.getElementById('group-odometer');
         const distGroup = document.getElementById('group-distance-driven');
         const motoGroup = document.getElementById('group-motohours');
@@ -573,13 +518,7 @@
 
     function resetInfoPanel() {
         document.getElementById('info-board').style.display = 'none';
-        window._currentBut = '';
-        window._currentIdVnutr = '';
-        window._currentIdOBTIT = '';
-        window._currentOvtIt = '';
-        window._currentFuelType = '';
-        window._currentOilType = '';
-        window._vehicleCache = null;
+        window._currentBut = ''; window._currentIdVnutr = ''; window._currentOvtIt = ''; window._vehicleCache = null;
     }
 
     function addFuelRow() {
@@ -699,33 +638,17 @@
     }
 
     async function checkDuplicatePeriod() {
-        const p = document.getElementById('report_period').value;
-        const n = document.getElementById('vehicle_number').value.trim();
-        window.submitAction = 'create';
-
+        const p = document.getElementById('report_period').value, n = document.getElementById('vehicle_number').value.trim();
+        window._submitAction = 'create';
         if (p && n) {
             const tableIdParam = TABLE_ID ? `&table_id=${encodeURIComponent(TABLE_ID)}` : '';
             const monthParam = REPORT_MONTH ? `&month=${encodeURIComponent(REPORT_MONTH)}` : '';
             const yearParam = REPORT_YEAR ? `&year=${encodeURIComponent(REPORT_YEAR)}` : '';
-
+            
             const r = await fetch(`${N8N_CLOUD_HOST}/webhook/check-period-duplicate?number=${encodeURIComponent(n)}&period=${encodeURIComponent(p)}${tableIdParam}${monthParam}${yearParam}`);
-
-            if (r.ok) {
-                const result = await r.json();
-
-                if (result.exists) {
-                    const confirmUpdate = confirm(`Для ${n} вже існує запис за період ${p}. Натисніть OK для перезапису даними з минулого періоду.`);
-
-                    if (confirmUpdate) {
-                        window.submitAction = 'update';
-                        await fetchVehicleData(n, 'previous_period');
-                    } else {
-                        document.getElementById('report_period').value = '';
-                        resetInfoPanel();
-                    }
-                } else {
-                    window.submitAction = 'create';
-                }
+            if (r.ok && (await r.json()).exists) {
+                if (confirm(`Дані для ${n} за період ${p} вже є. Оновити?`)) window._submitAction = 'update';
+                else document.getElementById('report_period').value = '';
             }
         }
     }
